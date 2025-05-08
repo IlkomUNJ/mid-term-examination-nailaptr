@@ -352,4 +352,141 @@ impl BstNode {
             Some(x) => Some(x.upgrade().unwrap()),
         }
     }
+
+    /**
+     * Function 1: Add a new node
+     */
+     pub fn add_node(&self, target_node: &BstNodeLink, value: i32) -> bool {
+        if let Some(key) = self.key {
+            if BstNode::is_node_match(&self.get_bst_nodelink_copy(), target_node) {
+                // Found target node, add new node as child
+                if value < key {
+                    if self.left.is_none() {
+                        self.add_left_child(&self.get_bst_nodelink_copy(), value);
+                    } else {
+                        return self.left.as_ref().unwrap().borrow().add_node(target_node, value);
+                    }
+                } else {
+                    if self.right.is_none() {
+                        self.add_right_child(&self.get_bst_nodelink_copy(), value);
+                    } else {
+                        return self.right.as_ref().unwrap().borrow().add_node(target_node, value);
+                    }
+                }
+                return true;
+            }
+            
+            // Search in left and right subtrees
+            if let Some(left) = &self.left {
+                if left.borrow().add_node(target_node, value) {
+                    return true;
+                }
+            }
+            if let Some(right) = &self.right {
+                if right.borrow().add_node(target_node, value) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /**
+     * Function 2: Find the predecessor of a node
+     */
+    pub fn tree_predecessor(node: &BstNodeLink) -> Option<BstNodeLink> {
+        // If node has left child, predecessor is maximum of left subtree
+        if let Some(left) = &node.borrow().left {
+            return Some(left.borrow().maximum());
+        }
+        
+        // Find a node that is right child of its parent
+        let mut current = node.clone();
+        while let Some(parent) = BstNode::upgrade_weak_to_strong(current.borrow().parent.clone()) {
+            if let Some(right) = &parent.borrow().right {
+                if BstNode::is_node_match(right, &current) {
+                    return Some(parent);
+                }
+            }
+            current = parent;
+        }
+        None
+    }
+
+    /**
+     * Function 3: Find the median node in the tree
+     */
+    pub fn median(&self) -> BstNodeLink {
+        let mut count = 0;
+        let mut target = self.count_nodes() / 2;
+        
+        fn find_median(node: &BstNodeLink, count: &mut i32, target: i32) -> Option<BstNodeLink> {
+            if let Some(left) = &node.borrow().left {
+                if let Some(result) = find_median(left, count, target) {
+                    return Some(result);
+                }
+            }
+            
+            *count += 1;
+            if *count == target {
+                return Some(node.clone());
+            }
+            
+            if let Some(right) = &node.borrow().right {
+                return find_median(right, count, target);
+            }
+            None
+        }
+        
+        find_median(&self.get_bst_nodelink_copy(), &mut count, target)
+            .unwrap_or_else(|| self.get_bst_nodelink_copy())
+    }
+
+    /**
+     * Count total nodes in the tree
+     */
+    fn count_nodes(&self) -> i32 {
+        let mut count = 1;
+        if let Some(left) = &self.left {
+            count += left.borrow().count_nodes();
+        }
+        if let Some(right) = &self.right {
+            count += right.borrow().count_nodes();
+        }
+        count
+    }
+
+    /**
+     * Function 4: Rebalance the tree
+     */
+    pub fn tree_rebalance(node: &BstNodeLink) -> BstNodeLink {
+        let median_node = node.borrow().median();
+        
+        // If median is already the root, no need to rebalance
+        if BstNode::is_node_match(node, &median_node) {
+            return node.clone();
+        }
+        
+        // Remove median node from its current position
+        let median_parent = BstNode::upgrade_weak_to_strong(median_node.borrow().parent.clone());
+        let median_left = median_node.borrow().left.clone();
+        let median_right = median_node.borrow().right.clone();
+        
+        // Make median the new root
+        median_node.borrow_mut().parent = None;
+        
+        // Rebalance left subtree
+        if let Some(left) = median_left {
+            median_node.borrow_mut().left = Some(BstNode::tree_rebalance(&left));
+            median_node.borrow().left.as_ref().unwrap().borrow_mut().parent = Some(BstNode::downgrade(&median_node));
+        }
+        
+        // Rebalance right subtree
+        if let Some(right) = median_right {
+            median_node.borrow_mut().right = Some(BstNode::tree_rebalance(&right));
+            median_node.borrow().right.as_ref().unwrap().borrow_mut().parent = Some(BstNode::downgrade(&median_node));
+        }
+        
+        median_node
+    }
 }
